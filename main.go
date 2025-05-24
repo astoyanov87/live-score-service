@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -34,30 +35,46 @@ func handleSse(w http.ResponseWriter, r *http.Request) {
 
 	ticker := time.NewTicker(20 * time.Second)
 	defer ticker.Stop()
+
+	// Run a loop to send scraped data to the client
 	for {
 		select {
 		case <-ticker.C:
-			// Scrape live score
-
-			// var test int
-			// test = 18
-			score, err := handlers.FetchLiveScore("990f7d4d-d6a9-4054-a00f-5ebd93cd23d6")
+			// Scrape data
+			score, err := handlers.FetchLiveScore("e8f0ffdd-56ee-4128-8e56-552d6d0ed069")
 			if err != nil {
 				fmt.Fprintf(w, "data: Error scraping data: %v\n\n", err)
 			} else {
-				fmt.Printf("Sending data to client: %d", score.HomePlayerCurrentBreak)
-				fmt.Fprintf(w, "data: %d\n\n", score.HomePlayerCurrentBreak) // Send live score to client
+
+				data := struct {
+					HomePlayerFrames              int `json:"homePlayerFrames"`
+					HomePlayerScoreInCurrentFrame int `json:"homePlayerPointsInCurrentFrame"`
+					HomePlayerCurrentBreak        int `json:"homePlayerCurrentBreak"`
+					AwayPlayerFrames              int `json:"awayPlayerFrames"`
+					AwayPlayerScoreInCurrentFrame int `json:"awayPlayerPointsInCurrentFrame"`
+					AwayPlayerCurrentBreak        int `json:"awayPlayerCurrentBreak"`
+				}{
+					HomePlayerFrames:              score.HomePlayerFrames,
+					HomePlayerScoreInCurrentFrame: score.HomeplayerPointsInCurrentFrame,
+					HomePlayerCurrentBreak:        score.HomePlayerCurrentBreak,
+					AwayPlayerFrames:              score.AwayPlayerFrames,
+					AwayPlayerScoreInCurrentFrame: score.AwayPlayerPointsInCurrentFrame,
+					AwayPlayerCurrentBreak:        score.AwayPlayerCurrentBreak,
+				}
+				jsonData, err := json.Marshal(data)
+				if err != nil {
+					log.Println("Error marshaling JSON:", err)
+					return
+				}
+				fmt.Printf("Sending data to client: %d", score.HomeplayerPointsInCurrentFrame)
+				fmt.Fprintf(w, "data: %s\n\n", jsonData)
 			}
 			flusher.Flush()
 
-			// Check if client has disconnected
-			if f, ok := w.(http.CloseNotifier); ok {
-				select {
-				case <-f.CloseNotify():
-					log.Println("Client disconnected.")
-					return
-				default:
-				}
+			// Check if the client has closed the connection
+			if r.Context().Err() != nil {
+				log.Println("Client closed connection")
+				return
 			}
 		}
 	}
